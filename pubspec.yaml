@@ -1,0 +1,27 @@
+name: circlecal
+description: "A new Flutter project."
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.5.3
+
+dependencies:
+  flutter:
+    sdk: flutter
+  shared_preferences: ^2.0.15
+  table_calendar: ^3.0.9
+  flutter_colorpicker: ^1.0.3
+  forge2d: ^0.11.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  fonts:
+    - family: Tenada
+      fonts:
+        - asset: assets/fonts/Tenada.ttf
