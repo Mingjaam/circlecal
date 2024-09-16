@@ -4,10 +4,9 @@ import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:forge2d/forge2d.dart';
 import 'memo_widget.dart';
 import '../models/friend.dart';
-import '../services/friend_manager.dart';
 import '../models/ball_info.dart';
+import '../models/stored_memo.dart';
 import '../services/ball_storage_service.dart';
-import '../models/emoji_info.dart';
 
 class ExpandedDayView extends StatefulWidget {
   final DateTime selectedDate;
@@ -28,7 +27,6 @@ class _ExpandedDayViewState extends State<ExpandedDayView> with SingleTickerProv
   List<Friend> friends = [];
   late World world;
   List<Ball> balls = [];
-  List<EmojiBody> emojis = []; // EmojiBody 리스트로 변경
   late AnimationController _controller;
   
   // 날짜 표시 박스의 크기
@@ -40,20 +38,19 @@ class _ExpandedDayViewState extends State<ExpandedDayView> with SingleTickerProv
   bool _needsSave = false;
   int _frameCount = 0;
   static const int SAVE_INTERVAL = 60; // 60프레임마다 저장 (약 1초)
-
-  final List<String> emojiList = ['😀', '😡', '😢', '😳', '😴', '😐', '🤔', '😍', '🤮', '😱'];
+  List<SharedMemo> sharedMemos = [];
 
   @override
   void initState() {
     super.initState();
-    _loadFriends();
     world = World(Vector2(0, 160));
     _controller = AnimationController(vsync: this, duration: const Duration(seconds: 1))
       ..repeat();
     _controller.addListener(_updatePhysics);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadBallsAndEmojis();
+      _loadBalls();
       _addWalls();
+      _loadMemos();
     });
   }
 
@@ -70,31 +67,12 @@ class _ExpandedDayViewState extends State<ExpandedDayView> with SingleTickerProv
     
     _frameCount++;
     if (_frameCount >= SAVE_INTERVAL && _needsSave) {
-      _saveBallsAndEmojis();
+      _saveBalls();
       _frameCount = 0;
       _needsSave = false;
     }
   }
 
-  // 친구 목록 불러오기
-  void _loadFriends() async {
-    final loadedFriends = await FriendManager.getFriends();
-    setState(() {
-      friends = loadedFriends;
-    });
-  }
-
-  // 친구 추가 다이얼로그 표시
-  void _addFriend() async {
-    final result = await showDialog<Friend>(
-      context: context,
-      builder: (context) => AddFriendDialog(),
-    );
-    if (result != null) {
-      await FriendManager.addFriend(result);
-      _loadFriends();
-    }
-  }
 
   // 공 추가
   void _addBall(Color color, double size) {
@@ -116,7 +94,7 @@ class _ExpandedDayViewState extends State<ExpandedDayView> with SingleTickerProv
     widget.onBallsChanged(); // 콜백 호출
   }
 
-  // 벽 추가 (공의 움직임을 제한하기 위함)
+  // 벽 추가 (공 움직임을 제한하기 위함)
   void _addWalls() {
     // 바닥
     _addWall(Vector2(0, dateBoxHeight), Vector2(dateBoxWidth, dateBoxHeight));
@@ -160,45 +138,39 @@ class _ExpandedDayViewState extends State<ExpandedDayView> with SingleTickerProv
     }
   }
 
-  void _addEmoji(String emoji) {
-    final random = math.Random();
-    final emojiBody = EmojiBody(
-      world,
-      position: Vector2(
-        random.nextDouble() * dateBoxWidth,
-        random.nextDouble() * dateBoxHeight,
-      ),
-      emoji: emoji,
-    );
-    setState(() {
-      emojis.add(emojiBody);
-    });
-    _needsSave = true;
-    widget.onBallsChanged();
+  void _addBallFromEmoji(String emoji, String text) {
+    final color = _getColorFromEmoji(emoji);
+    final size = 20.0;
+    _addBall(color, size);
   }
 
-  Future<void> _saveBallsAndEmojis() async {
-    await _saveBalls();
-    final emojiInfoList = emojis.map((emojiBody) => EmojiInfo(
-      emoji: emojiBody.emoji,
-      x: emojiBody.body.position.x / dateBoxWidth,
-      y: emojiBody.body.position.y / dateBoxHeight,
-    )).toList();
-    await _ballStorageService.saveEmojis(widget.selectedDate, emojiInfoList);
-  }
-
-  Future<void> _loadBallsAndEmojis() async {
-    await _loadBalls();
-    final emojiInfoList = await _ballStorageService.loadEmojis(widget.selectedDate);
-    if (emojiInfoList.isNotEmpty) {
-      setState(() {
-        emojis = emojiInfoList.map((info) => EmojiBody(
-          world,
-          position: Vector2(info.x * dateBoxWidth, info.y * dateBoxHeight),
-          emoji: info.emoji,
-        )).toList();
-      });
+  Color _getColorFromEmoji(String emoji) {
+    switch (emoji) {
+      case '😊': return Colors.orange[300]!; // 밝은 주황색
+      case '😃': return Colors.yellow[400]!; // 선명한 노란색
+      case '😍': return Colors.pink[300]!; // 밝은 분홍색
+      case '🥳': return Colors.purple[300]!; // 밝은 보라색
+      case '😎': return Colors.blue[400]!; // 선명한 파란색
+      case '🤔': return Colors.teal[300]!; // 밝은 청록색
+      case '😢': return Colors.lightBlue[300]!; // 밝은 하늘색
+      case '😡': return Colors.red[400]!; // 선명한 빨간색
+      case '😴': return Colors.indigo[300]!; // 밝은 남색
+      case '😌': return Colors.green[400]!; // 선명한 초록색
+      case '🥰': return Colors.deepOrange[300]!; // 밝은 진한 주황색
+      case '😂': return Colors.cyan[400]!; // 선명한 청록색
+      default: return Colors.grey[400]!; // 기본값: 중간 회색
     }
+  }
+
+  Future<void> _loadMemos() async {
+    final loadedMemos = await _ballStorageService.loadMemos(widget.selectedDate);
+    setState(() {
+      sharedMemos = loadedMemos;
+    });
+  }
+
+  Future<void> _saveMemos() async {
+    await _ballStorageService.saveMemos(widget.selectedDate, sharedMemos);
   }
 
   @override
@@ -209,95 +181,102 @@ class _ExpandedDayViewState extends State<ExpandedDayView> with SingleTickerProv
 
     return WillPopScope(
       onWillPop: () async {
-        await _saveBallsAndEmojis();
+        await _saveBallsAndClose();
         return true;
       },
       child: Dialog(
         backgroundColor: Colors.white,
         insetPadding: EdgeInsets.all(16),
-        child: Scaffold(
-          backgroundColor: Colors.white,
-          appBar: AppBar(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            title: Text('오늘은 무슨 일이 있었나요?', style: TextStyle(color: Colors.black)),
-            actions: [
-              IconButton(
-                icon: Icon(Icons.close, color: Colors.black),
-                onPressed: _saveBallsAndClose,
-              ),
-            ],
-          ),
-          body: Container(
-            width: screenSize.width * 0.9,
-            height: screenSize.height * 0.8,
-            child: Column(
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: dateBoxWidth,
-                      height: dateBoxHeight,
-                      margin: EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Stack(
-                        children: [
-                          Positioned(
-                            left: 16,
-                            top: 16,
-                            child: Text(
-                              '${widget.selectedDate.day}',
-                              style: TextStyle(
-                                fontSize: 36,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.blue,
-                              ),
-                            ),
-                          ),
-                          CustomPaint(
-                            painter: BallAndEmojiPainter(balls, emojis),
-                            size: Size(dateBoxWidth, dateBoxHeight),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: Container(
-                        height: dateBoxHeight,
-                        margin: EdgeInsets.all(16),
-                        child: MemoWidget(date: widget.selectedDate),
-                      ),
-                    ),
-                  ],
-                ),
-                Expanded(
-                  child: Container(
-                    margin: EdgeInsets.all(16),
-                    child: Column(
-                      children: [
-                        Wrap(
-                          spacing: 16,
-                          runSpacing: 16,
-                          children: [
-                            ...friends.map((friend) => _buildFriendCircle(friend)),
-                            _buildAddFriendButton(),
-                          ],
-                        ),
-                        SizedBox(height: 16),
-                        Wrap(
-                          spacing: 16,
-                          runSpacing: 16,
-                          children: emojiList.map((emoji) => _buildEmojiButton(emoji)).toList(),
-                        ),
-                      ],
-                    ),
-                  ),
+        child: GestureDetector(
+          onTap: () {
+            // 화면의 다른 부분을 터치하면 키보드를 닫습니다.
+            FocusScope.of(context).unfocus();
+          },
+          child: Scaffold(
+            backgroundColor: Colors.white,
+            appBar: AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              title: Text('오늘은 무슨 일이 있었나요?', style: TextStyle(color: Colors.black)),
+              actions: [
+                IconButton(
+                  icon: Icon(Icons.close, color: Colors.black),
+                  onPressed: _saveBallsAndClose,
                 ),
               ],
+            ),
+            body: Container(
+              width: screenSize.width * 0.9,
+              height: screenSize.height * 0.8,
+              child: Column(
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: dateBoxWidth,
+                        height: dateBoxHeight,
+                        margin: EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Stack(
+                          children: [
+                            Positioned(
+                              left: 16,
+                              top: 16,
+                              child: Text(
+                                '${widget.selectedDate.day}',
+                                style: TextStyle(
+                                  fontSize: 36,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue,
+                                ),
+                              ),
+                            ),
+                            CustomPaint(
+                              painter: BallPainter(balls),
+                              size: Size(dateBoxWidth, dateBoxHeight),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: Container(
+                          height: dateBoxHeight,
+                          margin: EdgeInsets.all(16),
+                          child: MemoWidget(
+                            date: widget.selectedDate,
+                            onShare: (String emoji, String text) {
+                              setState(() {
+                                sharedMemos.add(SharedMemo(emoji: emoji, text: text, date: DateTime.now()));
+                                _addBallFromEmoji(emoji, text);
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Expanded(
+                    child: Container(
+                      margin: EdgeInsets.all(16),
+                      child: ListView.builder(
+                        itemCount: sharedMemos.length,
+                        itemBuilder: (context, index) {
+                          final memo = sharedMemos[index];
+                          return ListTile(
+                            leading: Text(memo.emoji, style: TextStyle(fontSize: 24)),
+                            title: Text(memo.text),
+                            // subtitle 제거
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -326,49 +305,9 @@ class _ExpandedDayViewState extends State<ExpandedDayView> with SingleTickerProv
     );
   }
 
-  Widget _buildAddFriendButton() {
-    return GestureDetector(
-      onTap: _addFriend,
-      child: Column(
-        children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              color: Colors.grey[300],
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.add, color: Colors.black),
-          ),
-          SizedBox(height: 4),
-          Text('친구 추가', style: TextStyle(fontSize: 12)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmojiButton(String emoji) {
-    return GestureDetector(
-      onTap: () => _addEmoji(emoji),
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: Colors.grey[200],
-          shape: BoxShape.circle,
-        ),
-        child: Center(
-          child: Text(
-            emoji,
-            style: TextStyle(fontSize: 24),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _saveBallsAndClose() async {
-    await _saveBallsAndEmojis();
+  Future<void> _saveBallsAndClose() async {
+    await _saveBalls();
+    await _saveMemos();
     final ballInfoList = balls.map((ball) => BallInfo(
       color: ball.color,
       radius: ball.radius,
@@ -376,6 +315,7 @@ class _ExpandedDayViewState extends State<ExpandedDayView> with SingleTickerProv
       y: ball.body.position.y / dateBoxHeight,
     )).toList();
     widget.onClose(ballInfoList);
+    widget.onBallsChanged(); // 공 정보가 변경되었음을 알림
     Navigator.of(context).pop();
   }
 }
@@ -400,30 +340,10 @@ class Ball {
   }
 }
 
-class EmojiBody {
-  final Body body;
-  final String emoji;
-
-  EmojiBody(World world, {required Vector2 position, required this.emoji}) :
-    body = world.createBody(BodyDef()
-      ..type = BodyType.dynamic
-      ..position = position
-    ) {
-    final shape = CircleShape()..radius = 10.0; // 이모지의 크기를 설정
-    body.createFixture(FixtureDef(shape)
-      ..shape = shape
-      ..restitution = 0.8
-      ..density = 1.0
-      ..friction = 0.2
-    );
-  }
-}
-
-class BallAndEmojiPainter extends CustomPainter {
+class BallPainter extends CustomPainter {
   final List<Ball> balls;
-  final List<EmojiBody> emojis;
 
-  BallAndEmojiPainter(this.balls, this.emojis);
+  BallPainter(this.balls);
 
   @override
   void paint(Canvas canvas, Size size) { 
@@ -435,74 +355,8 @@ class BallAndEmojiPainter extends CustomPainter {
         paint,
       );
     }
-
-    final textPainter = TextPainter(textDirection: TextDirection.ltr);
-    for (final emojiBody in emojis) {
-      textPainter.text = TextSpan(
-        text: emojiBody.emoji,
-        style: TextStyle(fontSize: 20),
-      );
-      textPainter.layout();
-      textPainter.paint(
-        canvas,
-        Offset(emojiBody.body.position.x - textPainter.width / 2,
-               emojiBody.body.position.y - textPainter.height / 2),
-      );
-    }
   }
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
-}
-
-class AddFriendDialog extends StatefulWidget {
-  @override
-  _AddFriendDialogState createState() => _AddFriendDialogState();
-}
-
-class _AddFriendDialogState extends State<AddFriendDialog> {
-  final _nameController = TextEditingController();
-  Color _selectedColor = Colors.blue;
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text('친구 추가'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _nameController,
-            decoration: InputDecoration(labelText: '이름'),
-          ),
-          SizedBox(height: 16),
-          ColorPicker(
-            pickerColor: _selectedColor,
-            onColorChanged: (Color color) {
-              setState(() => _selectedColor = color);
-            },
-            showLabel: true,
-            pickerAreaHeightPercent: 0.8,
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text('취소'),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            if (_nameController.text.isNotEmpty) {
-              Navigator.of(context).pop(Friend(
-                name: _nameController.text,
-                color: _selectedColor,
-              ));
-            }
-          },
-          child: Text('추가'),
-        ),
-      ],
-    );
-  }
 }

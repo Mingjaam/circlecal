@@ -13,6 +13,14 @@ class ExpandedCalendarScreen extends StatefulWidget {
 }
 
 class _ExpandedCalendarScreenState extends State<ExpandedCalendarScreen> {
+  List<Map<String, String>> savedMemos = [];
+
+  void addMemo(String emoji, String text) {
+    setState(() {
+      savedMemos.add({'emoji': emoji, 'text': text});
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -27,12 +35,25 @@ class _ExpandedCalendarScreenState extends State<ExpandedCalendarScreen> {
               ),
               Expanded(
                 flex: 1,
-                child: MemoWidget(date: widget.selectedDate),
+                child: MemoWidget(
+                  date: widget.selectedDate,
+                  onShare: (String emoji, String text) {
+                    addMemo(emoji, text);
+                  },
+                ),
               ),
             ],
           ),
           Expanded(
-            child: FriendList(),
+            child: ListView.builder(
+              itemCount: savedMemos.length,
+              itemBuilder: (context, index) {
+                return ListTile(
+                  leading: Text(savedMemos[index]['emoji'] ?? ''),
+                  title: Text(savedMemos[index]['text'] ?? ''),
+                );
+              },
+            ),
           ),
         ],
       ),

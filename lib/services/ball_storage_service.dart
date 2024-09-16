@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/ball_info.dart';
-import '../models/emoji_info.dart';
+import '../models/stored_memo.dart';
 
 class BallStorageService {
   String _getKey(DateTime date) {
@@ -46,30 +46,24 @@ class BallStorageService {
     return 'emojis_${date.year}_${date.month}_${date.day}';
   }
 
-  Future<void> saveEmojis(DateTime date, List<EmojiInfo> emojis) async {
-    final prefs = await SharedPreferences.getInstance();
-    final emojiInfoList = emojis.map((emoji) => emoji.toJson()).toList();
-    await prefs.setString(_getEmojiKey(date), jsonEncode(emojiInfoList));
+  String _getMemoKey(DateTime date) {
+    return 'memos_${date.year}_${date.month}_${date.day}';
   }
 
-  Future<List<EmojiInfo>> loadEmojis(DateTime date) async {
+  Future<void> saveMemos(DateTime date, List<SharedMemo> memos) async {
     final prefs = await SharedPreferences.getInstance();
-    final emojisJson = prefs.getString(_getEmojiKey(date));
-    if (emojisJson != null) {
-      final emojiInfoList = (jsonDecode(emojisJson) as List).map((item) => EmojiInfo.fromJson(item)).toList();
-      return emojiInfoList;
+    final memoList = memos.map((memo) => memo.toJson()).toList();
+    await prefs.setString(_getMemoKey(date), jsonEncode(memoList));
+  }
+
+  Future<List<SharedMemo>> loadMemos(DateTime date) async {
+    final prefs = await SharedPreferences.getInstance();
+    final memosJson = prefs.getString(_getMemoKey(date));
+    if (memosJson != null) {
+      final memoList = (jsonDecode(memosJson) as List).map((item) => SharedMemo.fromJson(item)).toList();
+      return memoList;
     }
     return [];
   }
 
-  Future<Map<DateTime, List<EmojiInfo>>> loadEmojisForDateRange(DateTime start, DateTime end) async {
-    final Map<DateTime, List<EmojiInfo>> emojisMap = {};
-    for (DateTime date = start; date.isBefore(end.add(Duration(days: 1))); date = date.add(Duration(days: 1))) {
-      final emojis = await loadEmojis(date);
-      if (emojis.isNotEmpty) {
-        emojisMap[DateTime(date.year, date.month, date.day)] = emojis;
-      }
-    }
-    return emojisMap;
-  }
 }

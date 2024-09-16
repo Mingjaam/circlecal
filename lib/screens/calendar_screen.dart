@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../widgets/full_calendar.dart';
 import 'expanded_calendar_screen.dart';
 import '../services/ball_storage_service.dart';
+import '../widgets/memo_widget.dart';
 
 class CalendarScreen extends StatefulWidget {
   @override
@@ -10,6 +11,7 @@ class CalendarScreen extends StatefulWidget {
 
 class _CalendarScreenState extends State<CalendarScreen> {
   final BallStorageService _ballStorageService = BallStorageService();
+  int _selectedIndex = 0;
 
   void _resetAllData() async {
     showDialog(
@@ -45,25 +47,71 @@ class _CalendarScreenState extends State<CalendarScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('캘린더 앱'),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.refresh),
-            onPressed: _resetAllData,
-            tooltip: '전체 초기화',
-          ),
-        ],
-      ),
-      body: FullCalendar(
-        onDaySelected: (selectedDay) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ExpandedCalendarScreen(selectedDate: selectedDay),
+      body: SafeArea(
+        child: IndexedStack(
+          index: _selectedIndex,
+          children: [
+            FullCalendar(
+              onDaySelected: (selectedDay) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ExpandedCalendarScreen(selectedDate: selectedDay),
+                  ),
+                );
+              },
             ),
-          );
-        },
+            MemoWidget(
+              date: DateTime.now(),
+              onShare: (emoji, text) {
+                // 메모 저장 로직 구현
+              },
+            ),
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('설정'),
+                  SizedBox(height: 15),
+                  ElevatedButton(
+                    onPressed: _resetAllData,
+                    child: Text('전체 초기화'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: Container(
+        height: 50, // 네비게이션 바의 높이를 줄임
+        child: BottomNavigationBar(
+          items: const <BottomNavigationBarItem>[
+            BottomNavigationBarItem(
+              icon: Icon(Icons.calendar_today),
+              label: '캘린더',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.note),
+              label: '메모',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.settings),
+              label: '설정',
+            ),
+          ],
+          currentIndex: _selectedIndex,
+          selectedItemColor: Colors.blue,
+          unselectedItemColor: Colors.grey,
+          selectedFontSize: 10, // 선택된 아이템의 텍스트 크기를 줄임
+          unselectedFontSize: 10, // 선택되지 않은 아이템의 텍스트 크기를 줄임
+          iconSize: 14, // 아이콘 크기를 줄임
+          onTap: (index) {
+            setState(() {
+              _selectedIndex = index;
+            });
+          },
+        ),
       ),
     );
   }

@@ -4,7 +4,6 @@ import 'package:forge2d/forge2d.dart';
 import 'dart:math' as math;
 import 'expanded_day_view.dart';
 import '../models/ball_info.dart';
-import '../models/emoji_info.dart';
 import '../services/ball_storage_service.dart';
 import '../utils/physics_engine.dart';
 
@@ -25,7 +24,6 @@ class _FullCalendarState extends State<FullCalendar> with SingleTickerProviderSt
   final BallStorageService _ballStorageService = BallStorageService();
   Map<DateTime, List<BallInfo>> _ballsMap = {};
   Map<DateTime, PhysicsEngine> _physicsEngines = {};
-  Map<DateTime, List<EmojiInfo>> _emojisMap = {};
   late AnimationController _animationController;
   final double _ballRadiusRatio = 0.4;
 
@@ -63,11 +61,9 @@ class _FullCalendarState extends State<FullCalendar> with SingleTickerProviderSt
     final endDate = DateTime(month.year, month.month + 1, 0);
     
     final newBallsMap = await _ballStorageService.loadBallsForDateRange(startDate, endDate);
-    final newEmojisMap = await _ballStorageService.loadEmojisForDateRange(startDate, endDate);
     
     setState(() {
       _ballsMap = newBallsMap;
-      _emojisMap = newEmojisMap;
       _createPhysicsEngines();
     });
   }
@@ -76,12 +72,11 @@ class _FullCalendarState extends State<FullCalendar> with SingleTickerProviderSt
     _physicsEngines.clear();
     final cellSize = Vector2(MediaQuery.of(context).size.width / 7, MediaQuery.of(context).size.height / 8);
     
-    // 공이나 이모지가 있는 모든 날짜에 대해 PhysicsEngine 생성
-    Set<DateTime> datesWithContent = Set<DateTime>.from(_ballsMap.keys)..addAll(_emojisMap.keys);
+    // 공이 있는 모든 날짜에 대해 PhysicsEngine 생성
+    Set<DateTime> datesWithContent = Set<DateTime>.from(_ballsMap.keys);
     
     for (var date in datesWithContent) {
       final balls = _ballsMap[date] ?? [];
-      final emojis = _emojisMap[date] ?? [];
       
       final engine = PhysicsEngine(
         gravity: Vector2(0, 30),
@@ -91,10 +86,6 @@ class _FullCalendarState extends State<FullCalendar> with SingleTickerProviderSt
       
       for (var ball in balls) {
         engine.addBall(ball, _ballRadiusRatio);
-      }
-      
-      for (var emoji in emojis) {
-        engine.addEmoji(emoji);
       }
       
       _physicsEngines[date] = engine;
@@ -109,55 +100,86 @@ class _FullCalendarState extends State<FullCalendar> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
-    return TableCalendar(
-      firstDay: DateTime.utc(2010, 10, 16),
-      lastDay: DateTime.utc(2030, 3, 14),
-      focusedDay: _focusedDay,
-      calendarFormat: CalendarFormat.month,
-      selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-      onDaySelected: (selectedDay, focusedDay,) {
-        setState(() {
-          _selectedDay = selectedDay;
-          _focusedDay = focusedDay;
-        });
-        _showExpandedDayView(selectedDay);
-      },
-      onPageChanged: (focusedDay) {
-        _focusedDay = focusedDay;
-        _loadBallsForMonth(focusedDay);
-      },
-      calendarStyle: CalendarStyle(
-        outsideDaysVisible: false,
-        cellMargin: EdgeInsets.zero,
-        cellPadding: EdgeInsets.zero,
-      ),
-      daysOfWeekHeight: 40,
-      rowHeight: (MediaQuery.of(context).size.height - AppBar().preferredSize.height - MediaQuery.of(context).padding.top - 40) / 7.1,
-      headerStyle: HeaderStyle(
-        formatButtonVisible: false,
-        titleCentered: false,
-        leftChevronVisible: false,
-        rightChevronVisible: false,
-        titleTextStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-      ),
-      calendarBuilders: CalendarBuilders(
-        defaultBuilder: (context, day, focusedDay) {
-          return _buildCalendarCell(day, false, false);
-        },
-        selectedBuilder: (context, day, focusedDay) {
-          return _buildCalendarCell(day, true, false);
-        },
-        todayBuilder: (context, day, focusedDay) {
-          return _buildCalendarCell(day, false, true);
-        },
-      ),
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0), // 상하 패딩을 줄임
+          child: Text(
+            "${_focusedDay.year}년, ${_focusedDay.month}월의 기억들..",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+        ),
+        TableCalendar(
+          firstDay: DateTime.utc(2010, 10, 16),
+          lastDay: DateTime.utc(2030, 3, 14),
+          focusedDay: _focusedDay,
+          sixWeekMonthsEnforced: true,
+          calendarFormat: CalendarFormat.month,
+          selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+          onDaySelected: (selectedDay, focusedDay,) {
+            if (selectedDay.isAfter(DateTime.now())) {
+              _showFutureWarning();
+            } else {
+              setState(() {
+                _selectedDay = selectedDay;
+                _focusedDay = focusedDay;
+              });
+              _showExpandedDayView(selectedDay);
+            }
+          },
+          onPageChanged: (focusedDay) {
+            setState(() {
+              _focusedDay = focusedDay;
+            });
+            _loadBallsForMonth(focusedDay);
+            _loadBallsForMonth(DateTime(focusedDay.year, focusedDay.month + 1, 1));
+          },
+          calendarStyle: CalendarStyle(
+            outsideDaysVisible: false,
+            cellMargin: EdgeInsets.zero,
+            cellPadding: EdgeInsets.zero,
+          ),
+          daysOfWeekHeight: 20, // 요일 행의 높이를 줄임
+          rowHeight: (MediaQuery.of(context).size.height - 
+                      AppBar().preferredSize.height - 
+                      MediaQuery.of(context).padding.top - 
+                      20 - 8) / 7, // 캘린더 셀의 높이를 조정
+          headerStyle: HeaderStyle(
+            formatButtonVisible: false,
+            titleCentered: false,
+            leftChevronVisible: false,
+            rightChevronVisible: false,
+            titleTextStyle: TextStyle(fontSize: 0), // 기본 헤더 텍스트 숨기기
+          ),
+          calendarBuilders: CalendarBuilders(
+            defaultBuilder: (context, day, focusedDay) {
+              return _buildCalendarCell(day, false, false);
+            },
+            selectedBuilder: (context, day, focusedDay) {
+              return _buildCalendarCell(day, true, false);
+            },
+            todayBuilder: (context, day, focusedDay) {
+              return _buildCalendarCell(day, false, true);
+            },
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildCalendarCell(DateTime day, bool isSelected, bool isToday) {
     final balls = _ballsMap[DateTime(day.year, day.month, day.day)] ?? [];
-    final emojis = _emojisMap[DateTime(day.year, day.month, day.day)] ?? [];
     final engine = _physicsEngines[DateTime(day.year, day.month, day.day)];
+    
+    // 요일에 따른 색상 설정
+    Color dayColor;
+    if (day.weekday == DateTime.sunday) {
+      dayColor = Colors.red;
+    } else if (day.weekday == DateTime.saturday) {
+      dayColor = Colors.blue;
+    } else {
+      dayColor = isSelected ? Colors.blue : (isToday ? Colors.blue : Colors.black);
+    }
     
     return Container(
       margin: EdgeInsets.all(2),
@@ -174,15 +196,15 @@ class _FullCalendarState extends State<FullCalendar> with SingleTickerProviderSt
               child: Text(
                 '${day.day}',
                 style: TextStyle(
-                  color: isSelected ? Colors.blue : (isToday ? Colors.blue : null),
+                  color: dayColor,
                   fontWeight: isSelected || isToday ? FontWeight.bold : null,
                 ),
               ),
             ),
           ),
-          if (balls.isNotEmpty || emojis.isNotEmpty)
+          if (balls.isNotEmpty)
             CustomPaint(
-              painter: BallAndEmojiPainter(engine, balls, emojis, _ballRadiusRatio),
+              painter: BallPainter(engine, balls, _ballRadiusRatio),
               size: Size(MediaQuery.of(context).size.width / 7, MediaQuery.of(context).size.height / 8),
             ),
         ],
@@ -191,23 +213,50 @@ class _FullCalendarState extends State<FullCalendar> with SingleTickerProviderSt
   }
 
   void _showExpandedDayView(DateTime selectedDay) {
+    if (selectedDay.isAfter(DateTime.now())) {
+      _showFutureWarning();
+    } else {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return Dialog(
+            insetPadding: EdgeInsets.all(20),
+            child: ExpandedDayView(
+              selectedDate: selectedDay,
+              onClose: (List<BallInfo> updatedBalls) async {
+                await _ballStorageService.saveBalls(selectedDay, updatedBalls);
+                _loadBallsForMonth(_focusedDay);
+                setState(() {});
+              },
+              onBallsChanged: () {
+                _loadBallsForMonth(_focusedDay);
+                setState(() {});
+              },
+            ),
+          );
+        },
+      );
+    }
+  }
+
+  void _showFutureWarning() {
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return Dialog(
-          insetPadding: EdgeInsets.all(20),
-          child: ExpandedDayView(
-            selectedDate: selectedDay,
-            onClose: (List<BallInfo> updatedBalls) async {
-              await _ballStorageService.saveBalls(selectedDay, updatedBalls);
-              _loadBallsForMonth(_focusedDay);
-              setState(() {});
-            },
-            onBallsChanged: () {
-              _loadBallsForMonth(_focusedDay);
-              setState(() {});
-            },
+        return AlertDialog(
+          title: Text(
+            '오늘,기억',
+            style: TextStyle(fontSize: 16), 
           ),
+          content: Text('미래의 기억은 생성할 수 없어요.'),
+          actions: <Widget>[
+            TextButton(
+              child: Text('확인'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
         );
       },
     );
@@ -222,13 +271,12 @@ class _FullCalendarState extends State<FullCalendar> with SingleTickerProviderSt
   }
 }
 
-class BallAndEmojiPainter extends CustomPainter {
+class BallPainter extends CustomPainter {
   final PhysicsEngine? engine;
   final List<BallInfo> balls;
-  final List<EmojiInfo> emojis;
   final double radiusRatio;
 
-  BallAndEmojiPainter(this.engine, this.balls, this.emojis, this.radiusRatio);
+  BallPainter(this.engine, this.balls, this.radiusRatio);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -244,22 +292,6 @@ class BallAndEmojiPainter extends CustomPainter {
         Offset(positions[i].x, positions[i].y),
         radius,
         paint,
-      );
-    }
-
-    // 이모지 그리기
-    final textPainter = TextPainter(textDirection: TextDirection.ltr);
-    for (int i = balls.length; i < positions.length && i - balls.length < emojis.length; i++) {
-      final emoji = emojis[i - balls.length];
-      textPainter.text = TextSpan(
-        text: emoji.emoji,
-        style: TextStyle(fontSize: 12),
-      );
-      textPainter.layout();
-      textPainter.paint(
-        canvas,
-        Offset(positions[i].x - textPainter.width / 2,
-               positions[i].y - textPainter.height / 2),
       );
     }
   }

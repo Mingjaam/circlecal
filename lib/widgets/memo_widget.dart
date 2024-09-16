@@ -1,78 +1,71 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../models/stored_memo.dart';
+import '../utils/emiji_picker.dart';
 
 class MemoWidget extends StatefulWidget {
   final DateTime date;
+  final Function(String emoji, String text) onShare;
 
-  MemoWidget({required this.date});
+  MemoWidget({required this.date, required this.onShare});
 
   @override
   _MemoWidgetState createState() => _MemoWidgetState();
 }
 
 class _MemoWidgetState extends State<MemoWidget> {
-  late TextEditingController _controller;
+  String selectedEmoji = '😊';
+  TextEditingController _textController = TextEditingController();
 
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController();
-    _loadMemo();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  // 메모 불러오기
-  void _loadMemo() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final key = _getMemoKey(widget.date);
-      final memo = prefs.getString(key) ?? '';
-      if (mounted) {  // 위젯이 여전히 트리에 있는지 확인
-        setState(() {
-          _controller.text = memo;
-        });
-      }
-    } catch (e) {
-      print('메모 불러오기 오류: $e');
-    }
-  }
-
-  // 메모 저장하기
-  void _saveMemo(String memo) async {
-    final prefs = await SharedPreferences.getInstance();
-    final key = _getMemoKey(widget.date);
-    await prefs.setString(key, memo);
-  }
-
-  // 날짜별 고유 키 생성
-  String _getMemoKey(DateTime date) {
-    return 'memo_${date.year}_${date.month}_${date.day}';
+  void _openEmojiPicker() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return EmojiPicker(
+          onEmojiSelected: (emoji) {
+            setState(() {
+              selectedEmoji = emoji;
+            });
+          },
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-      ),
-      child: TextField(
-        controller: _controller,
-        maxLines: null,
-        style: TextStyle(fontSize: 14),
-        decoration: InputDecoration(
-          hintText: '메모를 입력하세요',
-          hintStyle: TextStyle(fontSize: 14),
-          contentPadding: EdgeInsets.all(12),
-          border: InputBorder.none,
+    return Column(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _textController,
+            decoration: InputDecoration(hintText: '메모를 입력하세요'),
+            maxLines: null,
+            expands: true,
+          ),
         ),
-        onChanged: (value) {
-          _saveMemo(value);
-        },
-      ),
+        Row(
+          children: [
+            GestureDetector(
+              onTap: _openEmojiPicker,
+              child: Container(
+                padding: EdgeInsets.all(8),
+                child: Text(selectedEmoji, style: TextStyle(fontSize: 24)),
+              ),
+            ),
+            Spacer(),
+            IconButton(
+              icon: Icon(Icons.send),
+              onPressed: _textController.text.trim().isEmpty
+                  ? null  // 텍스트가 비어있으면 버튼 비활성화
+                  : () {
+                      widget.onShare(selectedEmoji, _textController.text);
+                      _textController.clear();
+                    },
+              tooltip: '저장하기',
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
