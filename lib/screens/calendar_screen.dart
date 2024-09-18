@@ -3,6 +3,8 @@ import '../widgets/full_calendar.dart';
 import 'expanded_calendar_screen.dart';
 import '../services/ball_storage_service.dart';
 import '../widgets/memo_widget.dart';
+import 'package:provider/provider.dart';
+import '../services/theme_service.dart';
 
 class CalendarScreen extends StatefulWidget {
   @override
@@ -71,8 +73,20 @@ class _CalendarScreenState extends State<CalendarScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text('설정'),
-                  SizedBox(height: 15),
+                  Text('설정', style: TextStyle(fontSize: 20)),
+                  SizedBox(height: 20),
+                  Consumer<ThemeService>(
+                    builder: (context, themeService, child) {
+                      return SwitchListTile(
+                        title: Text('다크 모드'),
+                        value: themeService.isDarkMode,
+                        onChanged: (value) {
+                          themeService.toggleTheme();
+                        },
+                      );
+                    },
+                  ),
+                  SizedBox(height: 20),
                   ElevatedButton(
                     onPressed: _resetAllData,
                     child: Text('전체 초기화'),
